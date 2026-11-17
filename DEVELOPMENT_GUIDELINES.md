@@ -61,6 +61,9 @@ src/
 | `common/`   | `common/` only                                            | import from any other layer           |
 
 - **Dependencies point down only.** A lower layer never imports a higher one.
+- **All interfaces and shared types live in `common/interfaces/`**, one file per area
+  (`journal.interface.ts`, `balance.interface.ts`, ...). No `interface` or exported `type`
+  declarations in handlers, services, stores or helpers.
 - **Interface first.** Every service and store sits behind an `I*` interface in
   `common/interfaces/` (`IJournalStore`, `IAuthorizationStore`, `IFeeService`, ...). Callers
   depend on the interface, never the class.
