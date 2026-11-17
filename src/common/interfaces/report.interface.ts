@@ -52,3 +52,9 @@ export interface ReplayResult {
   readonly journal: IJournalStore;
   readonly authorizationStore: IAuthorizationStore;
 }
+
+/** One row of the restated view: each account's closing balance for a value day. */
+export interface RestatedRow {
+  readonly day: Day;
+  readonly balances: readonly { readonly accountId: string; readonly closing: Money }[];
+}
