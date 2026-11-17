@@ -84,13 +84,26 @@ src/
   `event.handler.ts`, `money.helper.ts`, `ledger.interface.ts`.
 - Interfaces start with `I` when they are a contract (`IFeeService`). Plain data shapes don't
   (`Entry`, `Account`, `Money`). Types and interfaces are PascalCase.
-- **Two kinds of failure, kept apart:**
-  - Business outcomes (declined authorization, force-posted settlement, late event, rejected
-    reversal) are **recorded as `Incident`s** with a stable `ErrorCode` and reported per day.
+- **Three kinds of failure, kept apart:**
+  - **Invalid input** (unknown account, currency mismatch, bad amount, day outside the window,
+    unknown event type) is caught at the handler and **recorded as an `ERROR` incident** for
+    that day. One bad event never stops the replay.
+  - **Business outcomes** (declined authorization, force-posted settlement, late event, refused
+    reversal) are **recorded as incidents** with a stable `ErrorCode` and reported per day.
     They never throw.
-  - Programmer errors and broken invariants (unknown account, currency mismatch, event after
-    the window closed) **throw `LedgerError(message, code)`**.
+  - **Programmer errors and broken invariants** below the handler (e.g. an event after the
+    window closed) **throw `LedgerError(message, code)`**. The handler converts a
+    `LedgerError` raised while parsing input into a rejection; anything else propagates.
 - Never swallow an error.
+- **Privacy:** use the TypeScript `private` keyword for class members (enforced by the
+  TypeScript compiler only). Do not use `#` private fields. Runtime protection of ledger data
+  comes from `Object.freeze` and copy-on-read, not from field privacy.
+- **Descriptive names.** Name variables, parameters and methods for what they hold or do
+  (`preFeeBalance`, `existingFee`, `validateShape`, `routeToLedgerService`), not single letters
+  or abbreviations (`d`, `e`, `t`, `o`, `req`). The only exception is a conventional loop index
+  that is not used for anything else.
+- Readable over clever: no nested ternaries, no dense one-line conditionals. Name the condition
+  (`isAfterValueDay`) and branch on the name.
 
 ## 4. Output
 
