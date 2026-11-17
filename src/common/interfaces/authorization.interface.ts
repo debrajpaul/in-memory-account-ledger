@@ -29,7 +29,7 @@ export interface AuthTransition {
 }
 
 export interface IAuthorizationStore {
-  record(t: AuthTransition): AuthTransition;
+  record(transition: AuthTransition): AuthTransition;
   current(authId: string): AuthTransition | undefined;
   history(authId?: string): readonly AuthTransition[];
   /** Sum of holds whose latest state is APPROVED. */

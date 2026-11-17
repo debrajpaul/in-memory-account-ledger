@@ -12,26 +12,29 @@ const base = {
 
 describe('AuthorizationStore', () => {
   it('an APPROVED hold counts as active until a later SETTLED transition', () => {
-    const s = new AuthorizationStore();
-    s.record({ ...base, state: 'APPROVED' });
-    expect(s.activeHolds('ACC-001', 'AED').minor).toBe(20000n);
-    s.record({ ...base, state: 'SETTLED', day: 4, sourceId: 'E5' });
-    expect(s.activeHolds('ACC-001', 'AED').minor).toBe(0n);
+    const store = new AuthorizationStore();
+    store.record({ ...base, state: 'APPROVED' });
+    expect(store.activeHolds('ACC-001', 'AED').minor).toBe(20000n);
+    store.record({ ...base, state: 'SETTLED', day: 4, sourceId: 'E5' });
+    expect(store.activeHolds('ACC-001', 'AED').minor).toBe(0n);
   });
 
   it('keeps every transition (append-only) and current() is the latest', () => {
-    const s = new AuthorizationStore();
-    s.record({ ...base, state: 'APPROVED' });
-    s.record({ ...base, state: 'SETTLED', day: 4 });
-    expect(s.history('Auth-A').map((t) => t.state)).toEqual(['APPROVED', 'SETTLED']);
-    expect(s.current('Auth-A')?.state).toBe('SETTLED');
-    expect(s.current('Auth-Z')).toBeUndefined();
+    const store = new AuthorizationStore();
+    store.record({ ...base, state: 'APPROVED' });
+    store.record({ ...base, state: 'SETTLED', day: 4 });
+    expect(store.history('Auth-A').map((transition) => transition.state)).toEqual([
+      'APPROVED',
+      'SETTLED',
+    ]);
+    expect(store.current('Auth-A')?.state).toBe('SETTLED');
+    expect(store.current('Auth-Z')).toBeUndefined();
   });
 
   it('declined holds never count', () => {
-    const s = new AuthorizationStore();
-    s.record({ ...base, state: 'DECLINED' });
-    expect(s.activeHolds('ACC-001', 'AED').minor).toBe(0n);
+    const store = new AuthorizationStore();
+    store.record({ ...base, state: 'DECLINED' });
+    expect(store.activeHolds('ACC-001', 'AED').minor).toBe(0n);
   });
 
   it('transitions are frozen', () => {

@@ -5,7 +5,7 @@ import { ledgerBalance } from '../helpers/balance.helper.js';
 import { JournalStore } from '../stores/journal.store.js';
 import { ReversalService } from './reversal.service.js';
 
-const acc: Account = {
+const account: Account = {
   accountId: 'ACC-001',
   currency: 'AED',
   opening: { currency: 'AED', minor: 0n },
@@ -39,52 +39,57 @@ function setup() {
     bookedDay: 5,
     sourceId: 'E7',
   });
-  return { journal, e7, svc: new ReversalService(journal) };
+  return { journal, e7, service: new ReversalService(journal) };
 }
 
 describe('ReversalService', () => {
   it('E9 books +620.00, value Day 2, pointing at E7; Day 2 balance returns to 250.00', () => {
-    const { journal, e7, svc } = setup();
-    const r = svc.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.entry.amount.minor).toBe(62000n);
-      expect(r.entry.compensates).toBe(e7.entryId);
-      expect(r.entry.bookedDay).toBe(6);
+    const { journal, e7, service } = setup();
+    const result = service.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.entry.amount.minor).toBe(62000n);
+      expect(result.entry.compensates).toBe(e7.entryId);
+      expect(result.entry.bookedDay).toBe(6);
     }
-    expect(ledgerBalance(journal, acc, { valueDay: 2 }).minor).toBe(25000n);
+    expect(ledgerBalance(journal, account, { valueDay: 2 }).minor).toBe(25000n);
   });
 
   it('keeps the original: E7 is still in the journal, unchanged', () => {
-    const { journal, e7, svc } = setup();
-    svc.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
+    const { journal, e7, service } = setup();
+    service.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
     expect(journal.get(e7.entryId).amount.minor).toBe(-62000n);
     expect(journal.size).toBe(4);
   });
 
   it('as known on Day 5 the balance is still -370.00: the reversal does not rewrite the past', () => {
-    const { journal, e7, svc } = setup();
-    svc.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
-    expect(ledgerBalance(journal, acc, { valueDay: 2, knownAt: 5 }).minor).toBe(-37000n);
+    const { journal, e7, service } = setup();
+    service.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
+    expect(ledgerBalance(journal, account, { valueDay: 2, knownAt: 5 }).minor).toBe(-37000n);
   });
 
   it('refuses a second reversal of the same line', () => {
-    const { e7, svc } = setup();
-    svc.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
-    const again = svc.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9b' });
+    const { e7, service } = setup();
+    service.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
+    const again = service.reverse({ target: e7, valueDay: 2, bookedDay: 6, sourceId: 'E9b' });
     expect(!again.ok && again.code).toBe(ErrorCode.ALREADY_REVERSED);
   });
 
   it('refuses a reversal with a different value date, and books nothing', () => {
-    const { journal, e7, svc } = setup();
-    const r = svc.reverse({ target: e7, valueDay: 3, bookedDay: 6, sourceId: 'E9' });
-    expect(!r.ok && r.code).toBe(ErrorCode.REVERSAL_VALUE_DATE_MISMATCH);
+    const { journal, e7, service } = setup();
+    const result = service.reverse({ target: e7, valueDay: 3, bookedDay: 6, sourceId: 'E9' });
+    expect(!result.ok && result.code).toBe(ErrorCode.REVERSAL_VALUE_DATE_MISMATCH);
     expect(journal.size).toBe(3);
   });
 
   it('refuses an unknown target', () => {
-    const { svc } = setup();
-    const r = svc.reverse({ target: undefined, valueDay: 2, bookedDay: 6, sourceId: 'E9' });
-    expect(!r.ok && r.code).toBe(ErrorCode.UNKNOWN_ENTRY);
+    const { service } = setup();
+    const result = service.reverse({
+      target: undefined,
+      valueDay: 2,
+      bookedDay: 6,
+      sourceId: 'E9',
+    });
+    expect(!result.ok && result.code).toBe(ErrorCode.UNKNOWN_ENTRY);
   });
 });

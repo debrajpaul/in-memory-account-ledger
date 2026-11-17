@@ -13,47 +13,48 @@ const line: NewEntry = {
 
 describe('JournalStore', () => {
   it('assigns monotonic sequence numbers and ids', () => {
-    const j = new JournalStore();
-    expect(j.append(line).entryId).toBe('L1');
-    expect(j.append(line).seq).toBe(2);
-    expect(j.get('L2').seq).toBe(2);
+    const journal = new JournalStore();
+    expect(journal.append(line).entryId).toBe('L1');
+    expect(journal.append(line).seq).toBe(2);
+    expect(journal.get('L2').seq).toBe(2);
   });
 
   it('entries are frozen, including the amount: mutation throws', () => {
-    const e = new JournalStore().append(line);
+    const entry = new JournalStore().append(line);
     expect(() => {
-      (e as { valueDay: number }).valueDay = 9;
+      (entry as { valueDay: number }).valueDay = 9;
     }).toThrow(TypeError);
     expect(() => {
-      (e.amount as { minor: bigint }).minor = 0n;
+      (entry.amount as { minor: bigint }).minor = 0n;
     }).toThrow(TypeError);
   });
 
   it('a caller mutating its input object cannot change the stored line', () => {
     const input = { ...line, amount: { ...line.amount } };
-    const j = new JournalStore();
-    j.append(input);
+    const journal = new JournalStore();
+    journal.append(input);
     input.amount.minor = 999n;
-    expect(j.get('L1').amount.minor).toBe(100n);
+    expect(journal.get('L1').amount.minor).toBe(100n);
   });
 
   it('entries() returns a copy, so callers cannot delete history', () => {
-    const j = new JournalStore();
-    j.append(line);
-    (j.entries() as unknown[]).length = 0;
-    expect(j.size).toBe(1);
+    const journal = new JournalStore();
+    journal.append(line);
+    (journal.entries() as unknown[]).length = 0;
+    expect(journal.size).toBe(1);
   });
 
   it('has no update or delete API', () => {
-    const j = new JournalStore() as unknown as Record<string, unknown>;
-    for (const m of ['update', 'delete', 'remove', 'set', 'clear']) expect(j[m]).toBeUndefined();
+    const journal = new JournalStore() as unknown as Record<string, unknown>;
+    for (const methodName of ['update', 'delete', 'remove', 'set', 'clear'])
+      expect(journal[methodName]).toBeUndefined();
   });
 
   it('forAccount filters by account; get throws on an unknown id', () => {
-    const j = new JournalStore();
-    j.append(line);
-    j.append({ ...line, accountId: 'ACC-002', amount: { currency: 'BHD', minor: 1n } });
-    expect(j.forAccount('ACC-002')).toHaveLength(1);
-    expect(() => j.get('L99')).toThrow(/No journal entry/);
+    const journal = new JournalStore();
+    journal.append(line);
+    journal.append({ ...line, accountId: 'ACC-002', amount: { currency: 'BHD', minor: 1n } });
+    expect(journal.forAccount('ACC-002')).toHaveLength(1);
+    expect(() => journal.get('L99')).toThrow(/No journal entry/);
   });
 });

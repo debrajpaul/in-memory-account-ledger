@@ -53,7 +53,7 @@ export interface Account {
 export interface IJournalStore {
   append(input: NewEntry): Entry;
   get(entryId: string): Entry;
-  find(predicate: (e: Entry) => boolean): Entry | undefined;
+  find(predicate: (entry: Entry) => boolean): Entry | undefined;
   entries(): readonly Entry[];
   forAccount(accountId: string): readonly Entry[];
   readonly size: number;

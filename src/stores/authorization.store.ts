@@ -7,31 +7,39 @@ import type { Money } from '../common/interfaces/money.interface.js';
 
 /** Append-only log of authorization transitions. The current state is the latest transition. */
 export class AuthorizationStore implements IAuthorizationStore {
-  readonly #log: AuthTransition[] = [];
+  private readonly transitionLog: AuthTransition[] = [];
 
-  record(t: AuthTransition): AuthTransition {
-    const frozen = Object.freeze({ ...t });
-    this.#log.push(frozen);
-    return frozen;
+  record(transition: AuthTransition): AuthTransition {
+    const frozenTransition = Object.freeze({ ...transition });
+    this.transitionLog.push(frozenTransition);
+    return frozenTransition;
   }
 
   current(authId: string): AuthTransition | undefined {
-    for (let i = this.#log.length - 1; i >= 0; i--) {
-      const t = this.#log[i];
-      if (t?.authId === authId) return t;
+    for (let index = this.transitionLog.length - 1; index >= 0; index--) {
+      const transition = this.transitionLog[index];
+      if (transition?.authId === authId) return transition;
     }
     return undefined;
   }
 
   history(authId?: string): readonly AuthTransition[] {
-    return this.#log.filter((t) => authId === undefined || t.authId === authId);
+    return this.transitionLog.filter(
+      (transition) => authId === undefined || transition.authId === authId,
+    );
   }
 
   activeHolds(accountId: string, currency: Currency): Money {
-    const latest = new Map<string, AuthTransition>();
-    for (const t of this.#log) if (t.accountId === accountId) latest.set(t.authId, t);
-    let total = 0n;
-    for (const t of latest.values()) if (t.state === 'APPROVED') total += t.holdAmount.minor;
-    return { currency, minor: total };
+    const latestTransitionByAuthId = new Map<string, AuthTransition>();
+    for (const transition of this.transitionLog) {
+      if (transition.accountId === accountId) {
+        latestTransitionByAuthId.set(transition.authId, transition);
+      }
+    }
+    let totalHeldMinor = 0n;
+    for (const transition of latestTransitionByAuthId.values()) {
+      if (transition.state === 'APPROVED') totalHeldMinor += transition.holdAmount.minor;
+    }
+    return { currency, minor: totalHeldMinor };
   }
 }

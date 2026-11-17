@@ -5,8 +5,9 @@ import { POLICY } from '../common/policy.js';
 import { ledgerBalance } from '../helpers/balance.helper.js';
 import { formatMoney, money } from '../helpers/money.helper.js';
 
-const isFeeLineFor = (d: Day) => (e: Entry) =>
-  (e.kind === 'OVERDRAFT_FEE' || e.kind === 'OVERDRAFT_FEE_REFUND') && e.feeForDay === d;
+const isFeeLineForDay = (valueDay: Day) => (entry: Entry) =>
+  (entry.kind === 'OVERDRAFT_FEE' || entry.kind === 'OVERDRAFT_FEE_REFUND') &&
+  entry.feeForDay === valueDay;
 
 /**
  * Fees are derived from the value-dated journal, so they are reconciled, never patched.
@@ -15,12 +16,17 @@ export class FeeService implements IFeeService {
   constructor(private readonly journal: IJournalStore) {}
 
   activeFee(accountId: string, day: Day): Entry | undefined {
-    const lines = this.journal.forAccount(accountId);
-    const refunded = new Set(
-      lines.filter((e) => e.kind === 'OVERDRAFT_FEE_REFUND').map((e) => e.compensates),
+    const accountEntries = this.journal.forAccount(accountId);
+    const refundedFeeIds = new Set(
+      accountEntries
+        .filter((entry) => entry.kind === 'OVERDRAFT_FEE_REFUND')
+        .map((refund) => refund.compensates),
     );
-    return lines.find(
-      (e) => e.kind === 'OVERDRAFT_FEE' && e.feeForDay === day && !refunded.has(e.entryId),
+    return accountEntries.find(
+      (entry) =>
+        entry.kind === 'OVERDRAFT_FEE' &&
+        entry.feeForDay === day &&
+        !refundedFeeIds.has(entry.entryId),
     );
   }
 
@@ -38,21 +44,21 @@ export class FeeService implements IFeeService {
   reconcile(account: Account, processingDay: Day, runId: string): FeeRunResult {
     const booked: Entry[] = [];
     const errors: FeeRunError[] = [];
-    const fee = POLICY.overdraftFee[account.currency];
+    const feeAmount = POLICY.overdraftFee[account.currency];
 
-    for (let d = POLICY.window.firstDay; d <= processingDay; d++) {
-      const preFee = ledgerBalance(this.journal, account, {
-        valueDay: d,
-        exclude: isFeeLineFor(d),
+    for (let valueDay = POLICY.window.firstDay; valueDay <= processingDay; valueDay++) {
+      const preFeeBalance = ledgerBalance(this.journal, account, {
+        valueDay,
+        exclude: isFeeLineForDay(valueDay),
       });
-      const existing = this.activeFee(account.accountId, d);
+      const existingFee = this.activeFee(account.accountId, valueDay);
 
-      if (preFee.minor < 0n && !existing) {
-        if (!fee) {
+      if (preFeeBalance.minor < 0n && !existingFee) {
+        if (!feeAmount) {
           errors.push({
             code: ErrorCode.FEE_CURRENCY_UNSUPPORTED,
-            message: `${account.accountId} negative on Day ${d}; no overdraft fee defined in ${account.currency}`,
-            day: d,
+            message: `${account.accountId} negative on Day ${valueDay}; no overdraft fee defined in ${account.currency}`,
+            day: valueDay,
           });
           continue;
         }
@@ -60,26 +66,26 @@ export class FeeService implements IFeeService {
           this.journal.append({
             accountId: account.accountId,
             kind: 'OVERDRAFT_FEE',
-            amount: money(fee.currency, -fee.minor),
-            valueDay: d,
+            amount: money(feeAmount.currency, -feeAmount.minor),
+            valueDay,
             bookedDay: processingDay,
             sourceId: runId,
-            feeForDay: d,
-            note: `Day ${d} pre-fee closing ${formatMoney(preFee)}`,
+            feeForDay: valueDay,
+            note: `Day ${valueDay} pre-fee closing ${formatMoney(preFeeBalance)}`,
           }),
         );
-      } else if (preFee.minor >= 0n && existing) {
+      } else if (preFeeBalance.minor >= 0n && existingFee) {
         booked.push(
           this.journal.append({
             accountId: account.accountId,
             kind: 'OVERDRAFT_FEE_REFUND',
-            amount: money(existing.amount.currency, -existing.amount.minor),
-            valueDay: d,
+            amount: money(existingFee.amount.currency, -existingFee.amount.minor),
+            valueDay,
             bookedDay: processingDay,
             sourceId: runId,
-            feeForDay: d,
-            compensates: existing.entryId,
-            note: `Day ${d} no longer negative`,
+            feeForDay: valueDay,
+            compensates: existingFee.entryId,
+            note: `Day ${valueDay} no longer negative`,
           }),
         );
       }

@@ -21,35 +21,35 @@ export class ReversalService implements IReversalService {
    *  - the value date differs from the target's: the days in between would be misstated,
    *    so we refuse rather than guess which date was meant.
    */
-  reverse(req: ReverseRequest): ReverseResult {
-    const { target } = req;
+  reverse(request: ReverseRequest): ReverseResult {
+    const { target } = request;
     if (!target) {
       return { ok: false, code: ErrorCode.UNKNOWN_ENTRY, message: 'reversal target not found' };
     }
-    const already = this.journal.find(
-      (e) => e.kind === 'REVERSAL' && e.compensates === target.entryId,
+    const existingReversal = this.journal.find(
+      (entry) => entry.kind === 'REVERSAL' && entry.compensates === target.entryId,
     );
-    if (already) {
+    if (existingReversal) {
       return {
         ok: false,
         code: ErrorCode.ALREADY_REVERSED,
-        message: `${target.sourceId} already reversed by ${already.sourceId}`,
+        message: `${target.sourceId} already reversed by ${existingReversal.sourceId}`,
       };
     }
-    if (req.valueDay !== target.valueDay) {
+    if (request.valueDay !== target.valueDay) {
       return {
         ok: false,
         code: ErrorCode.REVERSAL_VALUE_DATE_MISMATCH,
-        message: `reversal value_date Day ${req.valueDay} != original Day ${target.valueDay}`,
+        message: `reversal value_date Day ${request.valueDay} != original Day ${target.valueDay}`,
       };
     }
     const entry = this.journal.append({
       accountId: target.accountId,
       kind: 'REVERSAL',
       amount: money(target.amount.currency, -target.amount.minor),
-      valueDay: req.valueDay,
-      bookedDay: req.bookedDay,
-      sourceId: req.sourceId,
+      valueDay: request.valueDay,
+      bookedDay: request.bookedDay,
+      sourceId: request.sourceId,
       compensates: target.entryId,
       note: `reverses ${target.sourceId}`,
     });

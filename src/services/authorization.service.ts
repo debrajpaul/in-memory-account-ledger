@@ -17,7 +17,7 @@ import { money } from '../helpers/money.helper.js';
 export class AuthorizationService implements IAuthorizationService {
   constructor(
     private readonly journal: IJournalStore,
-    private readonly auths: IAuthorizationStore,
+    private readonly authorizationStore: IAuthorizationStore,
   ) {}
 
   /**
@@ -25,26 +25,26 @@ export class AuthorizationService implements IAuthorizationService {
    * up to today, as known right now. The decision is final: it is not revisited if the ledger
    * it was based on is later corrected (see the annotated failing test).
    */
-  authorize(req: AuthorizeRequest): AuthorizeResult {
-    if (this.auths.current(req.authId)) {
+  authorize(request: AuthorizeRequest): AuthorizeResult {
+    if (this.authorizationStore.current(request.authId)) {
       return {
         ok: false,
         code: ErrorCode.DUPLICATE_AUTHORIZATION,
-        message: `${req.authId} already exists`,
+        message: `${request.authId} already exists`,
       };
     }
-    const { account } = req;
-    const ledger = ledgerBalance(this.journal, account, { valueDay: req.day });
-    const holds = this.auths.activeHolds(account.accountId, account.currency);
-    const availableBefore = money(account.currency, ledger.minor - holds.minor);
-    const approved = availableBefore.minor - req.hold.minor >= 0n;
+    const { account } = request;
+    const ledger = ledgerBalance(this.journal, account, { valueDay: request.day });
+    const activeHolds = this.authorizationStore.activeHolds(account.accountId, account.currency);
+    const availableBefore = money(account.currency, ledger.minor - activeHolds.minor);
+    const approved = availableBefore.minor - request.hold.minor >= 0n;
 
-    const transition = this.auths.record({
-      authId: req.authId,
+    const transition = this.authorizationStore.record({
+      authId: request.authId,
       accountId: account.accountId,
-      day: req.day,
-      sourceId: req.sourceId,
-      holdAmount: req.hold,
+      day: request.day,
+      sourceId: request.sourceId,
+      holdAmount: request.hold,
       availableBefore,
       ...(approved
         ? { state: 'APPROVED' as const }
@@ -60,41 +60,43 @@ export class AuthorizationService implements IAuthorizationService {
    *  - APPROVED hold, amount > hold:  settle, release nothing, flag SETTLEMENT_EXCEEDS_HOLD.
    *  - unknown / declined / already settled: force-post and flag for exception handling.
    */
-  settle(req: SettleRequest): SettleResult {
-    const auth = this.auths.current(req.authId);
-    const live = auth?.state === 'APPROVED' ? auth : undefined;
+  settle(request: SettleRequest): SettleResult {
+    const auth = this.authorizationStore.current(request.authId);
+    const liveAuth = auth?.state === 'APPROVED' ? auth : undefined;
 
     let exception: ErrorCode | undefined;
     if (!auth) exception = ErrorCode.SETTLEMENT_WITHOUT_AUTHORIZATION;
-    else if (!live) exception = ErrorCode.SETTLEMENT_ON_INACTIVE_AUTHORIZATION;
-    else if (req.amount.minor > live.holdAmount.minor)
+    else if (!liveAuth) exception = ErrorCode.SETTLEMENT_ON_INACTIVE_AUTHORIZATION;
+    else if (request.amount.minor > liveAuth.holdAmount.minor)
       exception = ErrorCode.SETTLEMENT_EXCEEDS_HOLD;
 
     const entry = this.journal.append({
-      accountId: req.account.accountId,
+      accountId: request.account.accountId,
       kind: 'SETTLEMENT',
-      amount: money(req.amount.currency, -req.amount.minor),
-      valueDay: req.valueDay,
-      bookedDay: req.bookedDay,
-      sourceId: req.sourceId,
-      note: `settles ${req.authId}${live ? '' : ' (force-post)'}`,
+      amount: money(request.amount.currency, -request.amount.minor),
+      valueDay: request.valueDay,
+      bookedDay: request.bookedDay,
+      sourceId: request.sourceId,
+      note: `settles ${request.authId}${liveAuth ? '' : ' (force-post)'}`,
     });
 
-    if (!live) return { entry, ...(exception ? { exception } : {}) };
+    if (!liveAuth) return { entry, ...(exception ? { exception } : {}) };
 
-    const released = money(
-      req.amount.currency,
-      req.amount.minor > live.holdAmount.minor ? 0n : live.holdAmount.minor - req.amount.minor,
+    const releasedAmount = money(
+      request.amount.currency,
+      request.amount.minor > liveAuth.holdAmount.minor
+        ? 0n
+        : liveAuth.holdAmount.minor - request.amount.minor,
     );
-    const transition = this.auths.record({
-      authId: live.authId,
-      accountId: live.accountId,
-      holdAmount: live.holdAmount,
+    const transition = this.authorizationStore.record({
+      authId: liveAuth.authId,
+      accountId: liveAuth.accountId,
+      holdAmount: liveAuth.holdAmount,
       state: 'SETTLED',
-      day: req.bookedDay,
-      sourceId: req.sourceId,
-      settledAmount: req.amount,
-      releasedAmount: released,
+      day: request.bookedDay,
+      sourceId: request.sourceId,
+      settledAmount: request.amount,
+      releasedAmount,
     });
     return { entry, transition, ...(exception ? { exception } : {}) };
   }

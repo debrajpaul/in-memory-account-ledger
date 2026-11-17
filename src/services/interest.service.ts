@@ -23,31 +23,36 @@ export class InterestService implements IInterestService {
   capitalize(account: Account, bookedDay: Day, runId: string): CapitalizationResult {
     const { firstDay, lastDay } = POLICY.window;
     const accruals: DailyAccrual[] = [];
-    let total = 0n;
+    let totalMinor = 0n;
 
-    for (let d = firstDay; d <= lastDay; d++) {
-      const closing = ledgerBalance(this.journal, account, { valueDay: d });
+    for (let valueDay = firstDay; valueDay <= lastDay; valueDay++) {
+      const closing = ledgerBalance(this.journal, account, { valueDay });
       const accrual =
         closing.minor > 0n
           ? applyRate(closing, POLICY.dailyInterestRate)
           : money(account.currency, 0n);
-      accruals.push({ day: d, closing, accrual });
-      total += accrual.minor;
+      accruals.push({ day: valueDay, closing, accrual });
+      totalMinor += accrual.minor;
     }
 
     const entry =
-      total === 0n
+      totalMinor === 0n
         ? undefined
         : this.journal.append({
             accountId: account.accountId,
             kind: 'INTEREST_CAPITALIZATION',
-            amount: money(account.currency, total),
+            amount: money(account.currency, totalMinor),
             valueDay: lastDay,
             bookedDay,
             sourceId: runId,
             note: `capitalize ${accruals.length} daily accruals`,
           });
 
-    return { accountId: account.accountId, accruals, total: money(account.currency, total), entry };
+    return {
+      accountId: account.accountId,
+      accruals,
+      total: money(account.currency, totalMinor),
+      entry,
+    };
   }
 }

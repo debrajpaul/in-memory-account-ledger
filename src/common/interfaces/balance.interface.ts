@@ -9,5 +9,5 @@ export interface BalanceQuery {
    */
   readonly knownAt?: Day;
   /** Optional extra filter, e.g. "leave out this day's own fee lines". */
-  readonly exclude?: (e: Entry) => boolean;
+  readonly exclude?: (entry: Entry) => boolean;
 }

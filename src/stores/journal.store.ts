@@ -2,45 +2,48 @@ import { ErrorCode, LedgerError } from '../common/errors.js';
 import type { Entry, IJournalStore, NewEntry } from '../common/interfaces/journal.interface.js';
 
 /**
- * In-memory append-only journal. Entries are frozen on write and readers always get a copy of
- * the array, so neither a caller nor a bug elsewhere can edit or remove history.
+ * In-memory append-only journal.
+ *  - The contract (IJournalStore) has no update or delete method.
+ *  - `private` keeps the backing array out of reach for type-checked code.
+ *  - At runtime, entries are frozen on write and readers always get a copy of the array,
+ *    so a caller cannot edit a stored line or shorten history through anything it is handed.
  */
 export class JournalStore implements IJournalStore {
-  readonly #entries: Entry[] = [];
-  readonly #byId = new Map<string, Entry>();
+  private readonly entryList: Entry[] = [];
+  private readonly entriesById = new Map<string, Entry>();
 
   append(input: NewEntry): Entry {
-    const seq = this.#entries.length + 1;
+    const sequenceNumber = this.entryList.length + 1;
     const entry: Entry = Object.freeze({
       ...input,
       amount: Object.freeze({ ...input.amount }),
-      seq,
-      entryId: `L${seq}`,
+      seq: sequenceNumber,
+      entryId: `L${sequenceNumber}`,
     });
-    this.#entries.push(entry);
-    this.#byId.set(entry.entryId, entry);
+    this.entryList.push(entry);
+    this.entriesById.set(entry.entryId, entry);
     return entry;
   }
 
   get(entryId: string): Entry {
-    const e = this.#byId.get(entryId);
-    if (!e) throw new LedgerError(`No journal entry ${entryId}`, ErrorCode.UNKNOWN_ENTRY);
-    return e;
+    const entry = this.entriesById.get(entryId);
+    if (!entry) throw new LedgerError(`No journal entry ${entryId}`, ErrorCode.UNKNOWN_ENTRY);
+    return entry;
   }
 
-  find(predicate: (e: Entry) => boolean): Entry | undefined {
-    return this.#entries.find(predicate);
+  find(predicate: (entry: Entry) => boolean): Entry | undefined {
+    return this.entryList.find(predicate);
   }
 
   entries(): readonly Entry[] {
-    return [...this.#entries];
+    return [...this.entryList];
   }
 
   forAccount(accountId: string): readonly Entry[] {
-    return this.#entries.filter((e) => e.accountId === accountId);
+    return this.entryList.filter((entry) => entry.accountId === accountId);
   }
 
   get size(): number {
-    return this.#entries.length;
+    return this.entryList.length;
   }
 }

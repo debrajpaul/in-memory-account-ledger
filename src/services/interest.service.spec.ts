@@ -31,19 +31,26 @@ describe('InterestService.capitalize', () => {
     journal.append(aed(-95000n, 1, 1, 'E2'));
     journal.append(aed(40000n, 3, 3, 'E4'));
     journal.append(aed(-36500n, 4, 4, 'E5+E6'));
-    const r = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
-    expect(r.accruals.map((a) => a.accrual.minor)).toEqual([10n, 10n, 26n, 11n, 11n, 11n]);
-    expect(r.total.minor).toBe(79n);
-    expect(r.entry?.valueDay).toBe(6);
+    const result = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
+    expect(result.accruals.map((accrual) => accrual.accrual.minor)).toEqual([
+      10n,
+      10n,
+      26n,
+      11n,
+      11n,
+      11n,
+    ]);
+    expect(result.total.minor).toBe(79n);
+    expect(result.entry?.valueDay).toBe(6);
     expect(ledgerBalance(journal, aedAcc, { valueDay: 6 }).minor).toBe(28579n);
   });
 
   it('the capitalized total always equals the sum of rounded accruals (criterion 8)', () => {
     const journal = new JournalStore();
     journal.append(aed(28500n, 1, 1, 'X')); // 0.114 per day: each rounds down
-    const r = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
-    const sum = r.accruals.reduce((s, a) => s + a.accrual.minor, 0n);
-    expect(r.total.minor).toBe(sum);
+    const result = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
+    const sum = result.accruals.reduce((sum, accrual) => sum + accrual.accrual.minor, 0n);
+    expect(result.total.minor).toBe(sum);
     expect(sum).toBe(66n); // 6 x 0.11; unrounded would be 0.684
   });
 
@@ -51,9 +58,16 @@ describe('InterestService.capitalize', () => {
     const journal = new JournalStore();
     journal.append(aed(-10000n, 1, 1, 'X'));
     journal.append(aed(10000n, 4, 4, 'Y'));
-    const r = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
-    expect(r.accruals.map((a) => a.accrual.minor)).toEqual([0n, 0n, 0n, 0n, 0n, 0n]);
-    expect(r.entry).toBeUndefined();
+    const result = new InterestService(journal).capitalize(aedAcc, 6, 'CAP-6');
+    expect(result.accruals.map((accrual) => accrual.accrual.minor)).toEqual([
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+      0n,
+    ]);
+    expect(result.entry).toBeUndefined();
   });
 
   it('uses final knowledge: a late, back-valued credit still earns interest for its value days', () => {
@@ -67,8 +81,15 @@ describe('InterestService.capitalize', () => {
       bookedDay: 6,
       sourceId: 'E10',
     });
-    const r = new InterestService(journal).capitalize(bhdAcc, 6, 'CAP-6');
-    expect(r.accruals.map((a) => a.accrual.minor)).toEqual([0n, 0n, 0n, 0n, 4n, 4n]);
-    expect(r.total.minor).toBe(8n); // BHD 0.008, rounded to 3 dp
+    const result = new InterestService(journal).capitalize(bhdAcc, 6, 'CAP-6');
+    expect(result.accruals.map((accrual) => accrual.accrual.minor)).toEqual([
+      0n,
+      0n,
+      0n,
+      0n,
+      4n,
+      4n,
+    ]);
+    expect(result.total.minor).toBe(8n); // BHD 0.008, rounded to 3 dp
   });
 });
