@@ -1,6 +1,7 @@
 import type { ErrorCode } from '../errors.js';
 import type { Account, Day } from './journal.interface.js';
 import type { Money } from './money.interface.js';
+import type { DayReport, Incident } from './report.interface.js';
 
 /**
  * Validated commands: what the handler hands to the ledger service. Money is parsed, the
@@ -41,6 +42,13 @@ export interface RejectCommand {
   readonly message: string;
 }
 
+/** A validated command tagged with the ledger operation it is for. */
+export type LedgerCommand =
+  | { readonly operation: 'post'; readonly command: PostCommand }
+  | { readonly operation: 'authorize'; readonly command: AuthorizeCommand }
+  | { readonly operation: 'settle'; readonly command: SettleCommand }
+  | { readonly operation: 'reverse'; readonly command: ReverseCommand };
+
 export interface ILedgerService {
   post(cmd: PostCommand): void;
   authorize(cmd: AuthorizeCommand): void;
@@ -48,6 +56,16 @@ export interface ILedgerService {
   reverse(cmd: ReverseCommand): void;
   /** Record an event the handler refused, so it appears in that day's errors. */
   reject(cmd: RejectCommand): void;
+}
+
+/** The clock side of the ledger: end-of-day runs and the results of the replay. */
+export interface ILedgerRunner {
+  /** Run end of day for every not-yet-closed day up to and including `day`. */
+  closeThrough(day: Day): void;
+  /** Close every remaining day of the window and return one report per day. */
+  finish(): readonly DayReport[];
+  reports(): readonly DayReport[];
+  incidents(): readonly Incident[];
 }
 
 export interface IEventHandler {

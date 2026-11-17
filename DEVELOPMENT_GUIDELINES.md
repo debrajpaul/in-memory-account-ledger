@@ -93,7 +93,8 @@ src/
     They never throw.
   - **Programmer errors and broken invariants** below the handler (e.g. an event after the
     window closed) **throw `LedgerError(message, code)`**. The handler converts a
-    `LedgerError` raised while parsing input into a rejection; anything else propagates.
+    `LedgerError` raised while _building_ a command into a rejection; it does not catch
+    anything raised after dispatch.
 - Never swallow an error.
 - **Privacy:** use the TypeScript `private` keyword for class members (enforced by the
   TypeScript compiler only). Do not use `#` private fields. Runtime protection of ledger data

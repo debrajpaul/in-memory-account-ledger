@@ -5,6 +5,7 @@ import type { Account, Day } from '../common/interfaces/journal.interface.js';
 import type {
   IEventHandler,
   ILedgerService,
+  LedgerCommand,
   RejectCommand,
 } from '../common/interfaces/ledger.interface.js';
 import type { Money } from '../common/interfaces/money.interface.js';
@@ -43,9 +44,18 @@ export class EventHandler implements IEventHandler {
       this.ledgerService.reject(validation.rejection);
       return;
     }
-    const event = validation.event;
+    const ledgerCommand = this.buildCommand(validation.event);
+    if (ledgerCommand) this.dispatch(ledgerCommand);
+  }
+
+  /**
+   * Turn a structurally valid event into a typed command. A LedgerError here is bad input
+   * (unknown account, currency mismatch, bad amount) and becomes a rejection. Errors raised
+   * later, inside the ledger service, are not caught: they are broken invariants.
+   */
+  private buildCommand(event: RawEvent): LedgerCommand | undefined {
     try {
-      this.routeToLedgerService(event, this.resolveAccount(event.accountId));
+      return this.toCommand(event, this.resolveAccount(event.accountId));
     } catch (error) {
       if (!(error instanceof LedgerError)) throw error;
       this.ledgerService.reject({
@@ -55,10 +65,28 @@ export class EventHandler implements IEventHandler {
         code: error.code,
         message: error.message,
       });
+      return undefined;
     }
   }
 
-  private routeToLedgerService(event: RawEvent, account: Account): void {
+  private dispatch(ledgerCommand: LedgerCommand): void {
+    switch (ledgerCommand.operation) {
+      case 'post':
+        this.ledgerService.post(ledgerCommand.command);
+        return;
+      case 'authorize':
+        this.ledgerService.authorize(ledgerCommand.command);
+        return;
+      case 'settle':
+        this.ledgerService.settle(ledgerCommand.command);
+        return;
+      case 'reverse':
+        this.ledgerService.reverse(ledgerCommand.command);
+        return;
+    }
+  }
+
+  private toCommand(event: RawEvent, account: Account): LedgerCommand {
     const commandBase = {
       eventId: event.eventId,
       day: event.day,
@@ -70,33 +98,41 @@ export class EventHandler implements IEventHandler {
       case 'DEBIT': {
         const amount = this.parseAmountForAccount(account, event.currency, event.amount);
         const instalmentCount = event.type === 'CREDIT' ? (event.instalments ?? 1) : 1;
-        this.ledgerService.post({
-          ...commandBase,
-          kind: event.type,
-          parts: splitEvenly(amount, instalmentCount),
-        });
-        return;
+        return {
+          operation: 'post',
+          command: {
+            ...commandBase,
+            kind: event.type,
+            parts: splitEvenly(amount, instalmentCount),
+          },
+        };
       }
       case 'AUTHORIZATION':
-        this.ledgerService.authorize({
-          ...commandBase,
-          authId: this.requireNonEmptyId(event.authId, 'authId'),
-          hold: this.parseAmountForAccount(account, event.currency, event.amount),
-        });
-        return;
+        return {
+          operation: 'authorize',
+          command: {
+            ...commandBase,
+            authId: this.requireNonEmptyId(event.authId, 'authId'),
+            hold: this.parseAmountForAccount(account, event.currency, event.amount),
+          },
+        };
       case 'SETTLEMENT':
-        this.ledgerService.settle({
-          ...commandBase,
-          authId: this.requireNonEmptyId(event.authId, 'authId'),
-          amount: this.parseAmountForAccount(account, event.currency, event.amount),
-        });
-        return;
+        return {
+          operation: 'settle',
+          command: {
+            ...commandBase,
+            authId: this.requireNonEmptyId(event.authId, 'authId'),
+            amount: this.parseAmountForAccount(account, event.currency, event.amount),
+          },
+        };
       case 'REVERSAL':
-        this.ledgerService.reverse({
-          ...commandBase,
-          targetEventId: this.requireNonEmptyId(event.targetEventId, 'targetEventId'),
-        });
-        return;
+        return {
+          operation: 'reverse',
+          command: {
+            ...commandBase,
+            targetEventId: this.requireNonEmptyId(event.targetEventId, 'targetEventId'),
+          },
+        };
     }
   }
 
