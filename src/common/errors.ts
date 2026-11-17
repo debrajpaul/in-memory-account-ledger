@@ -5,6 +5,7 @@
 export const ErrorCode = {
   INVALID_AMOUNT: 'INVALID_AMOUNT',
   CURRENCY_MISMATCH: 'CURRENCY_MISMATCH',
+  UNKNOWN_ENTRY: 'UNKNOWN_ENTRY',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
